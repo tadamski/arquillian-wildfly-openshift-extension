@@ -1,0 +1,13 @@
+apiVersion: wildfly.org/v1alpha1
+kind: WildFlyServer
+metadata:
+  name: template
+spec:
+  replicas: 1
+  applicationImage: image/teplate
+  storage:
+    volumeClaimTemplate:
+      spec:
+        resources:
+          requests:
+            storage: 3Gi

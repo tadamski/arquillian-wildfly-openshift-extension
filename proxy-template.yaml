@@ -1,0 +1,26 @@
+service:
+  type: LoadBalancer
+containerPorts:
+  http: 8080
+  https: 8443
+  stat: 1024
+config: |
+  global
+    log stdout format raw local0 debug
+    maxconn 1024
+  defaults
+    log global
+    timeout client 300s
+    timeout connect 300s
+    timeout server 300s
+  frontend fe_main
+    mode http
+    bind :8080
+    log global
+    default_backend server
+  backend server
+    balance roundrobin
+    mode http
+    log global
+    stick-table type string len 36 size 1m expire 8h
+    stick on cookie(JSESSIONID)
