@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 import org.eclipse.aether.DefaultRepositorySystemSession;
@@ -50,6 +51,7 @@ import org.jboss.galleon.maven.plugin.util.MavenArtifactRepositoryManager;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
 import org.jboss.shrinkwrap.descriptor.api.Descriptor;
+import org.slf4j.simple.SimpleLogger;
 import org.wildfly.plugin.tools.GalleonUtils;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -160,38 +162,51 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
 
     @Override
     public void deploy(Descriptor descriptor) throws DeploymentException {
+        System.setProperty(SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "DEBUG");
         try {
             if (!(descriptor instanceof WildFlyServerDescriptor)) {
                 throw new IllegalArgumentException("descriptor must be an instance of WildflyServerDescriptor");
             }
             WildFlyServerDescriptor serverDescriptor = (WildFlyServerDescriptor) descriptor;
             Archive<?> archive = serverDescriptor.getArchive();
-            String deploymentName = archive.getName().substring(0, archive.getName().lastIndexOf("."));
-            provisionServer(deploymentName, serverDescriptor.getLayers());
+
+            boolean provisioned = provisionServer(serverDescriptor);
             final InputStream input = archive.as(ZipExporter.class).exportAsInputStream();
             java.nio.file.Files.copy(input,
-                    new File(String.format("target/%s-server/standalone/deployments/",
-                            deploymentName)
-                            + archive.getName()).toPath(),
+                    new File("target/" + archive.getName()).toPath(),
                     StandardCopyOption.REPLACE_EXISTING);
-            installDockerImage(deploymentName);
-            deployWildFlyServer(deploymentName, serverDescriptor);
+            if (provisioned) {
+                installDockerImage(serverDescriptor.getServerName());
+            }
+            deployWildFlyServer(serverDescriptor);
+            // FIXME
+            // wait for deployments - proper callback would be great
+            Thread.sleep(3000);
         } catch (Exception e) {
             throw new DeploymentException(e.getMessage(), e);
         }
     }
 
-    private void provisionServer(String deploymentName, Set<String> layers)
+    private boolean provisionServer(WildFlyServerDescriptor serverDescriptor)
             throws URISyntaxException, ProvisioningException, NoLocalRepositoryManagerException {
 
-        log.info("Provisioning of server for deployment " + deploymentName + " started");
-
-        GalleonProvisioningConfig config = buildGalleonConfig(galleonBuilder, layers);
+        GalleonProvisioningConfig config = buildGalleonConfig(galleonBuilder, serverDescriptor.getLayers());
         ProvisioningBuilder builder = galleonBuilder.newProvisioningBuilder(config);
 
-        String serverName = deploymentName + "-server";
-        try (Provisioning pm = builder.setInstallationHome(Path.of("target", serverName)).build()) {
-            pm.provision(config);
+        String serverName = serverDescriptor.getServerName();
+
+        log.info("Provisioning of server " + serverName + " for deployment " + serverDescriptor.getDeploymentName()
+                + " started");
+
+        File serverFile = new File(serverName);
+        if (serverFile.exists()) {
+            log.info("Server present in cache - skipping the build");
+            return false;
+        } else {
+            try (Provisioning pm = builder.setInstallationHome(Path.of(serverName)).build()) {
+                pm.provision(config);
+            }
+            return true;
         }
     }
 
@@ -218,20 +233,20 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         return config;
     }
 
-    private void installDockerImage(String deploymentName) throws InterruptedException {
+    private void installDockerImage(String serverName) throws InterruptedException {
         DockerClient client = DockerClientBuilder.getInstance(dockerClientConfig).build();
 
         String imageTag = String.format("%s/%s/%s:latest", dockerClientConfig.getRegistryUrl(), OPENSHIFT_NAMESPACE,
-                deploymentName);
+                serverName);
 
-        log.info("Building Docker image for deployment " + deploymentName);
+        log.info("Building Docker image for server " + serverName);
         // Dockerfile declaration doesn't work normally (new File("Dockerfile")) because
         // of some docker-java bug
         client.buildImageCmd().withDockerfile(new File(new File("Dockerfile").getAbsolutePath()))
-                .withBuildArg("server_dir", deploymentName + "-server")
+                .withBuildArg("server_dir", serverName)
                 .withTag(imageTag).exec(new BuildImageResultCallback()).awaitCompletion();
 
-        log.info("Pushing Docker image for deployment " + deploymentName);
+        log.info("Pushing Docker image for deployment " + serverName);
         client.pushImageCmd(imageTag)
                 .withAuthConfig(new AuthConfig().withUsername(dockerClientConfig.getRegistryUsername())
                         .withPassword(dockerClientConfig.getRegistryPassword())
@@ -240,9 +255,10 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
 
     }
 
-    private void deployWildFlyServer(String deploymentName, WildFlyServerDescriptor serverDescriptor)
-            throws FileNotFoundException, IOException, InterruptedException, ExecutionException {
-        generateOperatorYaml(deploymentName, serverDescriptor.getReplicas());
+    private void deployWildFlyServer(WildFlyServerDescriptor serverDescriptor)
+            throws FileNotFoundException, IOException, InterruptedException, ExecutionException, TimeoutException {
+        String deploymentName = serverDescriptor.getDeploymentName();
+        generateOperatorYaml(serverDescriptor);
         try (OpenShiftClient client = new KubernetesClientBuilder().withConfig(openShiftConfig).build()
                 .adapt(OpenShiftClient.class)) {
             log.info("Deploying WildFlyServer for deployment " + deploymentName);
@@ -254,9 +270,11 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
             for (int i = 0; i < serverDescriptor.getReplicas(); i++) {
                 log.info("Waiting for pod " + deploymentName + "-" + i);
                 client.pods().inNamespace(OPENSHIFT_NAMESPACE).withName(deploymentName + "-" +
-                        i).waitUntilReady(100,
-                                TimeUnit.SECONDS);
+                        i).waitUntilReady(100, TimeUnit.SECONDS);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                client.pods().inNamespace(OPENSHIFT_NAMESPACE).withName(deploymentName + "-" + i)
+                        .file("/opt/wildfly/standalone/deployments/" + serverDescriptor.getArchive().getName())
+                        .upload(Path.of("target", serverDescriptor.getArchive().getName()));
                 if ((serverDescriptor.getPrincipal() != null) && (serverDescriptor.getPassword() != null)) {
                     log.info("Adding application user for pod " + deploymentName + "-" + i);
                     client.pods().inNamespace(OPENSHIFT_NAMESPACE).withName(deploymentName + "-" + i)
@@ -266,11 +284,14 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
                 }
             }
         }
+
         deployProxy(deploymentName, serverDescriptor.getReplicas());
     }
 
     @SuppressWarnings("unchecked")
-    private void generateOperatorYaml(String deploymentName, int replicas) throws FileNotFoundException, IOException {
+    private void generateOperatorYaml(WildFlyServerDescriptor serverDescriptor)
+            throws FileNotFoundException, IOException {
+        String deploymentName = serverDescriptor.getDeploymentName();
         log.info("Generating WildFlyServer Yaml for deployment " + deploymentName);
 
         Map<String, Object> data = yaml.load(new FileInputStream("operator-template.yaml"));
@@ -278,8 +299,8 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         Map<String, Object> specMap = (Map<String, Object>) data.get("spec");
         specMap.put("applicationImage",
                 String.format("%s/%s/%s:latest", dockerClientConfig.getRegistryUrl(), OPENSHIFT_NAMESPACE,
-                        deploymentName));
-        specMap.put("replicas", replicas);
+                        serverDescriptor.getServerName()));
+        specMap.put("replicas", serverDescriptor.getReplicas());
         FileWriter writer = new FileWriter(
                 String.format("target/%s-operator.yaml", deploymentName));
         yaml.dump(data, writer);
