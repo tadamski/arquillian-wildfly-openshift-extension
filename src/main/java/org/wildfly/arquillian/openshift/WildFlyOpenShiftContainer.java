@@ -49,9 +49,16 @@ import org.jboss.galleon.api.ProvisioningBuilder;
 import org.jboss.galleon.api.config.GalleonProvisioningConfig;
 import org.jboss.galleon.maven.plugin.util.MavenArtifactRepositoryManager;
 import org.jboss.shrinkwrap.api.Archive;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
+import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.descriptor.api.Descriptor;
 import org.slf4j.simple.SimpleLogger;
+import org.w3c.dom.Document;
+import org.wildfly.arquillian.openshift.protocol.TestExecutorApplication;
+import org.wildfly.arquillian.openshift.protocol.TestExecutorEndpoint;
 import org.wildfly.plugin.tools.GalleonUtils;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -147,7 +154,7 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
 
     @Override
     public ProtocolDescription getDefaultProtocol() {
-        return new ProtocolDescription("best protocol ever");
+        return new ProtocolDescription("OpenShiftHTTP");
     }
 
     @Override
@@ -286,6 +293,41 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         }
 
         deployProxy(deploymentName, serverDescriptor.getReplicas());
+    }
+
+    public void deployArquillianTestExecutor(String deploymentName, String archiveName, int replicas) throws IOException {
+        WebArchive serviceArchive = ShrinkWrap.create(WebArchive.class, "arquillian-test-executor.war");
+        serviceArchive.addClass(TestExecutorApplication.class);
+        serviceArchive.addClass(TestExecutorEndpoint.class);
+        serviceArchive.addAsManifestResource(createDeploymentStructure(archiveName), "jboss-deployment-structure.xml");
+        final InputStream input = serviceArchive.as(ZipExporter.class).exportAsInputStream();
+        java.nio.file.Files.copy(input,
+                new File("target/" + serviceArchive.getName()).toPath(),
+                StandardCopyOption.REPLACE_EXISTING);
+        try (OpenShiftClient client = new KubernetesClientBuilder().withConfig(openShiftConfig).build()
+                .adapt(OpenShiftClient.class)) {
+            log.info("Adding arquillian service for deployment " + deploymentName);
+            for (int i = 0; i < replicas; i++) {
+                log.info("Waiting for pod " + deploymentName + "-" + i);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                client.pods().inNamespace(OPENSHIFT_NAMESPACE).withName(deploymentName + "-" + i)
+                        .file("/opt/wildfly/standalone/deployments/" + serviceArchive.getName())
+                        .upload(Path.of("target", serviceArchive.getName()));
+            }
+        }
+    }
+
+    private StringAsset createDeploymentStructure(String deploymentName) {
+        return new StringAsset(String.format(
+                "<jboss-deployment-structure xmlns=\"urn:jboss:deployment-structure:1.2\">\n" + //
+                        "    <deployment>\n" + //
+                        "        <dependencies>\n" + //
+                        "            <module name=\"deployment.%s\"/>\n" + //
+                        "        </dependencies>\n" + //
+                        "    </deployment>\n" + //
+                        "</jboss-deployment-structure>",
+                deploymentName));
+
     }
 
     @SuppressWarnings("unchecked")

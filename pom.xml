@@ -8,6 +8,12 @@
     <artifactId>arquillian-wildfly-openshift-extension</artifactId>
     <version>1.0.0.Final-SNAPSHOT</version>
 
+    <parent>
+        <groupId>org.jboss</groupId>
+        <artifactId>jboss-parent</artifactId>
+        <version>49</version>
+    </parent>
+
 
     <properties>
         <version.wildfly>35.0.0.Final</version.wildfly>
@@ -121,6 +127,16 @@
             <artifactId>arquillian-junit-container</artifactId>
             <version>1.10.0.Final</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.arquillian.container</groupId>
+            <artifactId>arquillian-container-test-spi</artifactId>
+            <version>1.10.0.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.arquillian.junit</groupId>
+            <artifactId>arquillian-junit-container</artifactId>
+            <version>1.10.0.Final</version>
         </dependency>
     </dependencies>
 </project>
