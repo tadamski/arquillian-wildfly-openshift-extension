@@ -1,4 +1,4 @@
-package org.wildfly.arquillian.openshift;
+package org.wildfly.arquillian.openshift.incluster;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
@@ -8,7 +8,8 @@ import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
+import org.wildfly.arquillian.openshift.api.Constants;
+import org.wildfly.arquillian.openshift.api.WildFlyServerDescriptor;
 
 import java.util.Hashtable;
 
@@ -27,7 +28,7 @@ public class SimpleStatefulTestCase {
     @Deployment(name = "client")
     public static WebArchive client() {
         WebArchive war = ShrinkWrap.create(WebArchive.class, "client.war");
-        war.addClasses(StatefulRemote.class, Constants.class);
+        war.addClass(StatefulRemote.class);
         return war;
     }
 
@@ -45,7 +46,7 @@ public class SimpleStatefulTestCase {
         try {
             if (statefulBean == null) {
                 statefulBean = (StatefulRemote) findServiceBean("service",
-                        "StatefulBean!org.wildfly.arquillian.openshift.StatefulRemote");
+                        "StatefulBean!org.wildfly.arquillian.openshift.incluster.StatefulRemote");
             }
             for (int i = 0; i < 100; i++) {
                 statefulBean.invoke();

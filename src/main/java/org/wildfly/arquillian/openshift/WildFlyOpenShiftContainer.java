@@ -1,12 +1,12 @@
 package org.wildfly.arquillian.openshift;
 
-import static org.wildfly.arquillian.openshift.Constants.DEFAULT_MAVEN_REPO_PATH;
-import static org.wildfly.arquillian.openshift.Constants.HAPROXY_CHART;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_NAMESPACE;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_PASSWORD;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_PRINCIPAL;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_REGISTRY_URL;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_REGISTRY_USERNAME;
+import static org.wildfly.arquillian.openshift.api.Constants.DEFAULT_MAVEN_REPO_PATH;
+import static org.wildfly.arquillian.openshift.api.Constants.HAPROXY_CHART;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_NAMESPACE;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_PASSWORD;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_PRINCIPAL;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_REGISTRY_URL;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_REGISTRY_USERNAME;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -57,6 +57,8 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.descriptor.api.Descriptor;
 import org.slf4j.simple.SimpleLogger;
 import org.w3c.dom.Document;
+import org.wildfly.arquillian.openshift.api.Constants;
+import org.wildfly.arquillian.openshift.api.WildFlyServerDescriptor;
 import org.wildfly.arquillian.openshift.protocol.TestExecutorApplication;
 import org.wildfly.arquillian.openshift.protocol.TestExecutorEndpoint;
 import org.wildfly.plugin.tools.GalleonUtils;

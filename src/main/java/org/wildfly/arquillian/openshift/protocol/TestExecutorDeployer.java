@@ -9,7 +9,7 @@ import org.jboss.arquillian.container.spi.event.container.AfterDeploy;
 import org.jboss.arquillian.core.api.annotation.Observes;
 import org.jboss.shrinkwrap.api.Archive;
 import org.wildfly.arquillian.openshift.WildFlyOpenShiftContainer;
-import org.wildfly.arquillian.openshift.WildFlyServerDescriptor;
+import org.wildfly.arquillian.openshift.api.WildFlyServerDescriptor;
 
 public class TestExecutorDeployer {
 
