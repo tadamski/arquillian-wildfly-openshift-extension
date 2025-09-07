@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -66,9 +67,7 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.BuildImageResultCallback;
-import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.AuthConfig;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
@@ -80,8 +79,6 @@ import com.marcnuri.helm.InstallCommand;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
-import io.fabric8.kubernetes.client.dsl.ExecListener;
-import io.fabric8.kubernetes.client.dsl.ExecWatch;
 import io.fabric8.openshift.client.OpenShiftClient;
 
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
@@ -197,7 +194,7 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
     }
 
     private boolean provisionServer(WildFlyServerDescriptor serverDescriptor)
-            throws URISyntaxException, ProvisioningException, NoLocalRepositoryManagerException {
+            throws URISyntaxException, ProvisioningException, NoLocalRepositoryManagerException, IOException {
 
         GalleonProvisioningConfig config = buildGalleonConfig(galleonBuilder, serverDescriptor.getLayers());
         ProvisioningBuilder builder = galleonBuilder.newProvisioningBuilder(config);
@@ -220,12 +217,17 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
     }
 
     private GalleonProvisioningConfig buildGalleonConfig(GalleonBuilder galleonBuilder, Set<String> layersSet)
-            throws ProvisioningException {
+            throws ProvisioningException, IOException {
 
         List<GalleonFeaturePack> featurePacks = new ArrayList<>();
         GalleonFeaturePack pack = new GalleonFeaturePack();
-        // FIXME build from maven wildfly version of tests project
-        pack.setLocation("org.wildfly:wildfly-galleon-pack:35.0.0.Final");
+
+        // ugly hack - but wasn't able to find any point of integrating with surefire mojo/repository
+        Properties mavenProperties = new Properties();
+        mavenProperties.load(new FileInputStream("target/maven.properties"));
+        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
+
+        pack.setLocation(String.format("org.wildfly:wildfly-galleon-pack:%s", wildflyVersion));
         featurePacks.add(pack);
 
         List<String> layers = new ArrayList<>();
@@ -297,7 +299,8 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         deployProxy(deploymentName, serverDescriptor.getReplicas());
     }
 
-    public void deployArquillianTestExecutor(String deploymentName, String archiveName, int replicas) throws IOException {
+    public void deployArquillianTestExecutor(String deploymentName, String archiveName, int replicas)
+            throws IOException {
         WebArchive serviceArchive = ShrinkWrap.create(WebArchive.class, "arquillian-test-executor.war");
         serviceArchive.addClass(TestExecutorApplication.class);
         serviceArchive.addClass(TestExecutorEndpoint.class);
