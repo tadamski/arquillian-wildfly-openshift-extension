@@ -1,12 +1,12 @@
 package org.wildfly.arquillian.openshift;
 
-import static org.wildfly.arquillian.openshift.Constants.DEFAULT_MAVEN_REPO_PATH;
-import static org.wildfly.arquillian.openshift.Constants.HAPROXY_CHART;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_NAMESPACE;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_PASSWORD;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_PRINCIPAL;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_REGISTRY_URL;
-import static org.wildfly.arquillian.openshift.Constants.OPENSHIFT_REGISTRY_USERNAME;
+import static org.wildfly.arquillian.openshift.api.Constants.DEFAULT_MAVEN_REPO_PATH;
+import static org.wildfly.arquillian.openshift.api.Constants.HAPROXY_CHART;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_NAMESPACE;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_PASSWORD;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_PRINCIPAL;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_REGISTRY_URL;
+import static org.wildfly.arquillian.openshift.api.Constants.OPENSHIFT_REGISTRY_USERNAME;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -49,17 +50,24 @@ import org.jboss.galleon.api.ProvisioningBuilder;
 import org.jboss.galleon.api.config.GalleonProvisioningConfig;
 import org.jboss.galleon.maven.plugin.util.MavenArtifactRepositoryManager;
 import org.jboss.shrinkwrap.api.Archive;
+import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
+import org.jboss.shrinkwrap.api.spec.JavaArchive;
+import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.descriptor.api.Descriptor;
 import org.slf4j.simple.SimpleLogger;
+import org.w3c.dom.Document;
+import org.wildfly.arquillian.openshift.api.Constants;
+import org.wildfly.arquillian.openshift.api.WildFlyServerDescriptor;
+import org.wildfly.arquillian.openshift.protocol.TestExecutorApplication;
+import org.wildfly.arquillian.openshift.protocol.TestExecutorEndpoint;
 import org.wildfly.plugin.tools.GalleonUtils;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.BuildImageCmd;
 import com.github.dockerjava.api.command.BuildImageResultCallback;
-import com.github.dockerjava.api.command.PushImageCmd;
 import com.github.dockerjava.api.model.AuthConfig;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
@@ -71,8 +79,6 @@ import com.marcnuri.helm.InstallCommand;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
-import io.fabric8.kubernetes.client.dsl.ExecListener;
-import io.fabric8.kubernetes.client.dsl.ExecWatch;
 import io.fabric8.openshift.client.OpenShiftClient;
 
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
@@ -147,7 +153,7 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
 
     @Override
     public ProtocolDescription getDefaultProtocol() {
-        return new ProtocolDescription("best protocol ever");
+        return new ProtocolDescription("OpenShiftHTTP");
     }
 
     @Override
@@ -188,7 +194,7 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
     }
 
     private boolean provisionServer(WildFlyServerDescriptor serverDescriptor)
-            throws URISyntaxException, ProvisioningException, NoLocalRepositoryManagerException {
+            throws URISyntaxException, ProvisioningException, NoLocalRepositoryManagerException, IOException {
 
         GalleonProvisioningConfig config = buildGalleonConfig(galleonBuilder, serverDescriptor.getLayers());
         ProvisioningBuilder builder = galleonBuilder.newProvisioningBuilder(config);
@@ -211,12 +217,17 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
     }
 
     private GalleonProvisioningConfig buildGalleonConfig(GalleonBuilder galleonBuilder, Set<String> layersSet)
-            throws ProvisioningException {
+            throws ProvisioningException, IOException {
 
         List<GalleonFeaturePack> featurePacks = new ArrayList<>();
         GalleonFeaturePack pack = new GalleonFeaturePack();
-        // FIXME build from maven wildfly version of tests project
-        pack.setLocation("org.wildfly:wildfly-galleon-pack:35.0.0.Final");
+
+        // ugly hack - but wasn't able to find any point of integrating with surefire mojo/repository
+        Properties mavenProperties = new Properties();
+        mavenProperties.load(new FileInputStream("target/maven.properties"));
+        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
+
+        pack.setLocation(String.format("org.wildfly:wildfly-galleon-pack:%s", wildflyVersion));
         featurePacks.add(pack);
 
         List<String> layers = new ArrayList<>();
@@ -286,6 +297,42 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         }
 
         deployProxy(deploymentName, serverDescriptor.getReplicas());
+    }
+
+    public void deployArquillianTestExecutor(String deploymentName, String archiveName, int replicas)
+            throws IOException {
+        WebArchive serviceArchive = ShrinkWrap.create(WebArchive.class, "arquillian-test-executor.war");
+        serviceArchive.addClass(TestExecutorApplication.class);
+        serviceArchive.addClass(TestExecutorEndpoint.class);
+        serviceArchive.addAsManifestResource(createDeploymentStructure(archiveName), "jboss-deployment-structure.xml");
+        final InputStream input = serviceArchive.as(ZipExporter.class).exportAsInputStream();
+        java.nio.file.Files.copy(input,
+                new File("target/" + serviceArchive.getName()).toPath(),
+                StandardCopyOption.REPLACE_EXISTING);
+        try (OpenShiftClient client = new KubernetesClientBuilder().withConfig(openShiftConfig).build()
+                .adapt(OpenShiftClient.class)) {
+            log.info("Adding arquillian service for deployment " + deploymentName);
+            for (int i = 0; i < replicas; i++) {
+                log.info("Waiting for pod " + deploymentName + "-" + i);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                client.pods().inNamespace(OPENSHIFT_NAMESPACE).withName(deploymentName + "-" + i)
+                        .file("/opt/wildfly/standalone/deployments/" + serviceArchive.getName())
+                        .upload(Path.of("target", serviceArchive.getName()));
+            }
+        }
+    }
+
+    private StringAsset createDeploymentStructure(String deploymentName) {
+        return new StringAsset(String.format(
+                "<jboss-deployment-structure xmlns=\"urn:jboss:deployment-structure:1.2\">\n" + //
+                        "    <deployment>\n" + //
+                        "        <dependencies>\n" + //
+                        "            <module name=\"deployment.%s\"/>\n" + //
+                        "        </dependencies>\n" + //
+                        "    </deployment>\n" + //
+                        "</jboss-deployment-structure>",
+                deploymentName));
+
     }
 
     @SuppressWarnings("unchecked")

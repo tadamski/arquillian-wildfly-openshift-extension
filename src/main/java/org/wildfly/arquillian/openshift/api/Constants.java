@@ -1,4 +1,4 @@
-package org.wildfly.arquillian.openshift;
+package org.wildfly.arquillian.openshift.api;
 
 public class Constants {
 

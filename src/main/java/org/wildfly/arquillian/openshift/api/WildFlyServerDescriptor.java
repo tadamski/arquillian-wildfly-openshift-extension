@@ -1,4 +1,4 @@
-package org.wildfly.arquillian.openshift;
+package org.wildfly.arquillian.openshift.api;
 
 import java.io.OutputStream;
 import java.lang.reflect.Array;

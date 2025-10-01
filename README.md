@@ -22,14 +22,14 @@ Prerequisites:
   mvn clean test
   ```
 
-## SimpleStatefulTestCase
+## In cluster test example
 
-As an example of extension behavior _SimpleStatefulTestCase_ was provided:
+As an example of internal cluster test _SimpleStatefulTestCase_ was provided:
 ```
-  @Deployment(name = "client")
+    @Deployment(name = "client")
     public static WebArchive client() {
         WebArchive war = ShrinkWrap.create(WebArchive.class, "client.war");
-        war.addClasses(ClientRestApplication.class, ClientEndpoint.class, StatefulRemote.class, Constants.class);
+        war.addClass(StatefulRemote.class);
         return war;
     }
 
@@ -37,28 +37,55 @@ As an example of extension behavior _SimpleStatefulTestCase_ was provided:
     public static WildFlyServerDescriptor service() {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "service.jar");
         jar.addClasses(StatefulBean.class, StatefulRemote.class);
-        return new WildFlyServerDescriptor(jar).setReplicas(2).setPrincipal(ClientEndpoint.PRINCIPAL)
-                .setPassword(ClientEndpoint.PASSWORD);
+        return new WildFlyServerDescriptor(jar).setReplicas(2).setPrincipal(PRINCIPAL)
+                .setPassword(PASSWORD);
     }
 ```
-This is the key part of the tests. Those two deployments are going to be deployed into an OpenShift as two independent services. The difference between bare 
-metal usage is introduction of _WildFlyServiceDescriptor_ which is a class that allows for configuration of OpenShift service deployment, you can also create 
-deployment with Archive in which case minimal service configuration would be used as in _client_ example below.
+This is the key part of the tests. Those two deployments are going to be deployed into an OpenShift as two independent services. The difference between bare metal usage is introduction of _WildFlyServiceDescriptor_ which is a class that allows for configuration of OpenShift service deployment, you can also create deployment with Archive in which case minimal service configuration would be used as in _client_ example below.
+
+```
+    @Test
+    @OperateOnDeployment("client")
+    public void test() throws Exception {
+        try {
+            if (statefulBean == null) {
+                statefulBean = (StatefulRemote) findServiceBean("service",
+                        "StatefulBean!org.wildfly.arquillian.openshift.incluster.StatefulRemote");
+            }
+            for (int i = 0; i < 100; i++) {
+                statefulBean.invoke();
+            }
+        } finally {
+            statefulBean = null;
+        }
+    }
+```
+The test will be run on the deployment specificed by @OperateOnDeployment annotation in the same it is done in baremetal test.
+
+You can sanity check the test by removing stickiness configuration parameters from ha-proxy template - the test is going to fail when one invocations hits the node without the session.
+
+## Outside cluster test example
+
+As an example of test that is run from outstide the cluster _OutsideClusterInvocationTestCase_ was provided. The test is annotated with _@RunAsClient_ annotation:
+
+```
+@RunWith(Arquillian.class)
+@RunAsClient
+public class OutsideClusterInvocationTestCase {
+```
+
+The test method is executed from the VM in which the test runs:
 
 ```
     @Test
     public void test() {
         Client client = ClientBuilder.newClient();
-        String result = client.target("http://client-route-wildfly-testsuite.apps-crc.testing/client")
+        String result = client.target("http://service-route-wildfly-testsuite.apps-crc.testing/service").queryParam("param", "foo")
                 .request("text/plain").get(String.class);
-        Assert.assertEquals("OK", result);
-
+        Assert.assertEquals("foobar", result);
     }
 ```
-The test itself runs in local VM and connects to client node via the route and verifies whether stateful session affinity is handled correctly. You can sanity check
-the test by removing stickiness configuration parameters from ha-proxy template - the test is going to fail when one invocations hits the node without the session.
 
 ## Current shortcommings
 The main purpose of initial version of this extension is to assess usefulness of above API for our usecases, as a result the internal code requires ammendments:
-* optimization - the tests runs slowly - I plan to optimize Galleon/Docker images usage to improve the execution time of the test
 * integration with maven-surefire-plugin - the version of artifact used had to be obtained from surefire plugin currently running the test
