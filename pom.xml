@@ -16,6 +16,9 @@
 
 
     <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+
         <version.wildfly>37.0.0.Final</version.wildfly>
         <version.wildfly.plugin.tools>1.2.2.Final</version.wildfly.plugin.tools>
         <version.jboss.arquillian>1.10.0.Final</version.jboss.arquillian>
@@ -149,7 +152,11 @@
             <version>${version.junit}</version>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.kohsuke.metainf-services</groupId>
+            <artifactId>metainf-services</artifactId>
+            <version>1.11</version>
+        </dependency>
     </dependencies>
 
     <build>
