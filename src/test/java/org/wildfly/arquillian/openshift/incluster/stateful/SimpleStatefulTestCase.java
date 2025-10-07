@@ -1,4 +1,4 @@
-package org.wildfly.arquillian.openshift.incluster;
+package org.wildfly.arquillian.openshift.incluster.stateful;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
@@ -46,7 +46,7 @@ public class SimpleStatefulTestCase {
         try {
             if (statefulBean == null) {
                 statefulBean = (StatefulRemote) findServiceBean("service",
-                        "StatefulBean!org.wildfly.arquillian.openshift.incluster.StatefulRemote");
+                        "StatefulBean!org.wildfly.arquillian.openshift.incluster.stateful.StatefulRemote");
             }
             for (int i = 0; i < 100; i++) {
                 statefulBean.invoke();

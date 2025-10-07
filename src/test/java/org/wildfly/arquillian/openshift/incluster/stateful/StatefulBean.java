@@ -1,4 +1,4 @@
-package org.wildfly.arquillian.openshift.incluster;
+package org.wildfly.arquillian.openshift.incluster.stateful;
 
 import jakarta.ejb.Stateful;
 
