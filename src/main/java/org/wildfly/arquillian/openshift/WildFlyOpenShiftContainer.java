@@ -219,16 +219,21 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
     private GalleonProvisioningConfig buildGalleonConfig(GalleonBuilder galleonBuilder, Set<String> layersSet)
             throws ProvisioningException, IOException {
 
-        List<GalleonFeaturePack> featurePacks = new ArrayList<>();
-        GalleonFeaturePack pack = new GalleonFeaturePack();
-
         // ugly hack - but wasn't able to find any point of integrating with surefire mojo/repository
         Properties mavenProperties = new Properties();
         mavenProperties.load(new FileInputStream("target/maven.properties"));
-        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
 
-        pack.setLocation(String.format("org.wildfly:wildfly-galleon-pack:%s", wildflyVersion));
-        featurePacks.add(pack);
+        List<GalleonFeaturePack> featurePacks = new ArrayList<>();
+
+        GalleonFeaturePack wildflyPack = new GalleonFeaturePack();
+        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
+        wildflyPack.setLocation(String.format("org.wildfly:wildfly-galleon-pack:%s", wildflyVersion));
+        featurePacks.add(wildflyPack);
+
+        GalleonFeaturePack datasourcesPack = new GalleonFeaturePack();
+        String datasourcesPackVersion = mavenProperties.getProperty("version.wildfly.datasources.pack");
+        datasourcesPack.setLocation(String.format("org.wildfly:wildfly-datasources-galleon-pack:%s", datasourcesPackVersion));
+        featurePacks.add(datasourcesPack);
 
         List<String> layers = new ArrayList<>();
         layers.addAll(layersSet);
@@ -348,6 +353,9 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
                 String.format("%s/%s/%s:latest", dockerClientConfig.getRegistryUrl(), OPENSHIFT_NAMESPACE,
                         serverDescriptor.getServerName()));
         specMap.put("replicas", serverDescriptor.getReplicas());
+        if (!serverDescriptor.getSystemProperties().isEmpty()) {
+            specMap.put("env", serverDescriptor.getSystemProperties());
+        }
         FileWriter writer = new FileWriter(
                 String.format("target/%s-operator.yaml", deploymentName));
         yaml.dump(data, writer);

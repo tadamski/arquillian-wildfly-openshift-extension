@@ -30,8 +30,19 @@ public class ServiceBean implements ServiceRemote {
     @TransactionAttribute(TransactionAttributeType.MANDATORY)
     public void incrementBarCount(String fooName) {
         log.info("ServiceBean#incrementBarCount");
-        Foo foo = (Foo) em.createQuery("select f from Foo f where f.name = :fooName").setParameter("fooName", fooName).getSingleResult();
+        Foo foo = findFooByName(fooName);
         foo.incrementBarCount();
+        log.info("Incremented bar count to "+foo.getBarCount());
         em.persist(foo);
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.NEVER)
+    public int getBarCount(String fooName) {
+        return findFooByName(fooName).getBarCount();
+    }
+
+    private Foo findFooByName(String fooName) {
+       return (Foo) em.createQuery("select f from Foo f where f.name = :fooName").setParameter("fooName", fooName).getSingleResult();
     }
 }

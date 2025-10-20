@@ -6,4 +6,5 @@ import jakarta.ejb.Local;
 public interface Client {
 
     void performFooTransaction(String fooName) throws Exception;
+    void checkBarCount(String fooName, int expectedBarCount) throws Exception;
 }

@@ -6,4 +6,5 @@ import jakarta.ejb.Remote;
 public interface ServiceRemote {
     void createFoo(String fooName);
     void incrementBarCount(String fooName);
+    int getBarCount(String fooName);
 }

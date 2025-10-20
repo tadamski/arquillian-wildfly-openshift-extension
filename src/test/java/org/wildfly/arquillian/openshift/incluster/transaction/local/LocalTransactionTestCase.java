@@ -32,8 +32,12 @@ public class LocalTransactionTestCase {
         JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "service.jar");
         jar.addClasses(ServiceRemote.class, ServiceBean.class, Foo.class);
         jar.addAsManifestResource("persistence.xml");
-        return new WildFlyServerDescriptor(jar).addLayers("h2-datasource").setReplicas(2).setPrincipal(PRINCIPAL)
-                .setPassword(PASSWORD);
+        return new WildFlyServerDescriptor(jar).addLayers("postgresql-default-datasource").setReplicas(2)
+                .setPrincipal(PRINCIPAL).setPassword(PASSWORD)
+                .addSystemProperty("POSTGRESQL_USER", "postgres")
+                .addSystemProperty("POSTGRESQL_PASSWORD", "postgres")
+                .addSystemProperty("POSTGRESQL_DATABASE", "postgres")
+                .addSystemProperty("POSTGRESQL_HOST", "postgres.wildfly-testsuite.svc.cluster.local");
     }
 
     @Test
@@ -42,6 +46,7 @@ public class LocalTransactionTestCase {
         Client client = findClientBean();
         String fooName = "foo";
         client.performFooTransaction(fooName);
+        client.checkBarCount(fooName, 30);
     }
 
     private Client findClientBean() throws NamingException {

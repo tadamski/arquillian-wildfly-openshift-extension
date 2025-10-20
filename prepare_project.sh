@@ -24,3 +24,11 @@ cd "$PROJECT_DIR" || exit
 echo "adding haproxy helm chart"
 helm repo add haproxytech https://haproxytech.github.io/helm-charts > /dev/null
 helm repo update > /dev/null
+
+echo "creating postgresql database"
+cd "$PROJECT_DIR"/postgres
+oc new-build --name build-postgres --binary --strategy docker > /dev/null
+oc start-build build-postgres --from-dir=. > /dev/null
+oc apply -f ./postgres.yaml > /dev/null
+oc expose svc/postgres > /dev/null
+cd "$PROJECT_DIR" || exit
