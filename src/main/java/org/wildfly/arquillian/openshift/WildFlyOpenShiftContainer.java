@@ -222,16 +222,17 @@ public class WildFlyOpenShiftContainer implements DeployableContainer<WildFlyOpe
         // ugly hack - but wasn't able to find any point of integrating with surefire mojo/repository
         Properties mavenProperties = new Properties();
         mavenProperties.load(new FileInputStream("target/maven.properties"));
-        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
 
         List<GalleonFeaturePack> featurePacks = new ArrayList<>();
 
         GalleonFeaturePack wildflyPack = new GalleonFeaturePack();
+        String wildflyVersion = mavenProperties.getProperty("version.wildfly");
         wildflyPack.setLocation(String.format("org.wildfly:wildfly-galleon-pack:%s", wildflyVersion));
         featurePacks.add(wildflyPack);
 
         GalleonFeaturePack datasourcesPack = new GalleonFeaturePack();
-        datasourcesPack.setLocation("org.wildfly:wildfly-datasources-galleon-pack:11.1.0.Final-SNAPSHOT");
+        String datasourcesPackVersion = mavenProperties.getProperty("version.wildfly.datasources.pack");
+        datasourcesPack.setLocation(String.format("org.wildfly:wildfly-datasources-galleon-pack:%s", datasourcesPackVersion));
         featurePacks.add(datasourcesPack);
 
         List<String> layers = new ArrayList<>();
