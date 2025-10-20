@@ -19,7 +19,8 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
 
-        <version.wildfly>37.0.0.Final</version.wildfly>
+        <version.wildfly>38.0.0.Beta1-SNAPSHOT</version.wildfly>
+        <version.wildfly.datasources.pack>11.1.0.Final-SNAPSHOT</version.wildfly.datasources.pack>
         <version.wildfly.plugin.tools>1.2.2.Final</version.wildfly.plugin.tools>
         <version.jboss.arquillian>1.10.0.Final</version.jboss.arquillian>
         <version.jboss.galleon>6.0.6.Final</version.jboss.galleon>

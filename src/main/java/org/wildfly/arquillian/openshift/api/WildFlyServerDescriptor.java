@@ -1,15 +1,15 @@
 package org.wildfly.arquillian.openshift.api;
 
 import java.io.OutputStream;
-import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -22,6 +22,7 @@ public class WildFlyServerDescriptor implements Descriptor {
     private final Archive<?> archive;
     private String deploymentName;
     private final Set<String> layers = new TreeSet<>();
+    private final List<Map<String, String>> systemProperties = new ArrayList<>();
     private String configHash;
     private int replicas;
     private String principal;
@@ -47,14 +48,24 @@ public class WildFlyServerDescriptor implements Descriptor {
     }
 
     public WildFlyServerDescriptor addLayers(String... layers) {
-        for (String layer : layers) {
-            this.layers.add(layer);
-        }
+        this.layers.addAll(Arrays.asList(layers));
         return this;
     }
 
     public Set<String> getLayers() {
         return layers;
+    }
+
+    public WildFlyServerDescriptor addSystemProperty(String name, String value) {
+        Map<String, String> map = new HashMap<>();
+        map.put("name", name);
+        map.put("value", value);
+        systemProperties.add(map);
+        return this;
+    }
+
+    public List<Map<String, String>> getSystemProperties() {
+        return systemProperties;
     }
 
     public String getServerName() {
@@ -73,7 +84,8 @@ public class WildFlyServerDescriptor implements Descriptor {
         try {
             result = encodeSHA256(
                     MessageDigest.getInstance("SHA-256").digest(sb.toString().getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ignored) {}
+        } catch (NoSuchAlgorithmException ignored) {
+        }
         return result;
     }
 
@@ -122,5 +134,4 @@ public class WildFlyServerDescriptor implements Descriptor {
     public void exportTo(OutputStream output) throws DescriptorExportException, IllegalArgumentException {
         archive.writeTo(output, null);
     }
-
 }
