@@ -3,6 +3,7 @@ package org.wildfly.arquillian.openshift.incluster.transaction.local;
 import jakarta.ejb.Stateless;
 import jakarta.ejb.TransactionAttribute;
 import jakarta.ejb.TransactionAttributeType;
+import org.junit.Assert;
 import org.wildfly.arquillian.openshift.api.Constants;
 
 import javax.naming.Context;
@@ -23,6 +24,15 @@ public class ClientBean implements Client {
             service.incrementBarCount(fooName);
         }
     }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.NEVER)
+    public void checkBarCount(String fooName, int expectedBarCount) throws Exception {
+        ServiceRemote service = (ServiceRemote) findServiceBean("service",
+                "ServiceBean!org.wildfly.arquillian.openshift.incluster.transaction.local.ServiceRemote");
+        Assert.assertEquals(expectedBarCount, service.getBarCount(fooName));
+    }
+
 
     static public Object findServiceBean(String serviceName, String beanName) throws NamingException {
         Hashtable<String, String> table = new Hashtable<>();
